@@ -3,8 +3,6 @@ import pandas as pd
 
 SET1_FILE = "data/processed/set1_linguistic_features.csv"
 SET2_FILE = "data/processed/set2_tfidf_features.csv"
-# NOTE: the task brief referred to this as set_sbert_features.csv, but the
-# S-BERT features actually live in set3_sbert_features.csv in data/processed.
 SBERT_FILE = "data/processed/set3_sbert_features.csv"
 
 OUTPUT_FILE = "data/processed/set3_combined_features.csv"
@@ -13,17 +11,17 @@ OUTPUT_FILE = "data/processed/set3_combined_features.csv"
 # feature families. We expect a perfect 1-to-1 alignment on participant_id.
 # An inner join is the safe choice here: if every set really does contain the
 # same 189 participants, inner / outer / left all return the identical 189 rows.
-# But if one set is silently missing a participant (or has a stray extra one),
-# inner join drops the unmatched rows instead of inventing NaNs. That lets the
+# But if one set is silently missing a participant,
+# inner join drops the unmatched rows instead of inventing NaNs. That makes the
 # row-count assertion below catch the misalignment loudly, so we never save a
 # combined matrix where some rows are padded with NaNs for a whole feature
-# family (which would quietly corrupt any model trained on it).
+# family which would quietly corrupt any model trained on it
 EXPECTED_ROWS = 189
 N_SBERT = 384
 
 
 def main():
-    # 1. Load all three feature sets
+    # Load all three feature sets
     set1 = pd.read_csv(SET1_FILE)
     set2 = pd.read_csv(SET2_FILE)
     sbert = pd.read_csv(SBERT_FILE)
@@ -32,16 +30,15 @@ def main():
     print("Set 2 (tfidf) shape:", set2.shape)
     print("S-BERT shape:", sbert.shape)
 
-    # 1b. Cast participant_id to string in each set so the merge keys line up
-    #     (a string "123" and an int 123 would otherwise fail to match).
+    # Cast participant_id to string in each set so the merge keys line up
     for df in (set1, set2, sbert):
         df["participant_id"] = df["participant_id"].astype(str)
 
-    # 2. Merge pairwise on participant_id with how="inner"
+    #  Merge pairwise on participant_id with how="inner"
     combined = pd.merge(set1, set2, on="participant_id", how="inner")
     combined = pd.merge(combined, sbert, on="participant_id", how="inner")
 
-    # 3. Assert the final row count is exactly 189; if not, report which
+    # Assert the final row count is exactly 189 if not, report which
     #    participant_ids are missing from which set, then raise an error.
     if combined.shape[0] != EXPECTED_ROWS:
         ids1 = set(set1["participant_id"])
@@ -59,14 +56,14 @@ def main():
             "refusing to save a misaligned feature matrix."
         )
 
-    # 4. Assert no duplicate column names (other than participant_id, which is
+    # Assert no duplicate column names (other than participant_id, which is
     #    the shared merge key and is expected to appear once in the result).
     cols = [c for c in combined.columns if c != "participant_id"]
     duplicates = [c for c in set(cols) if cols.count(c) > 1]
     if duplicates:
         raise ValueError(f"Duplicate column names after merge: {duplicates}")
 
-    # 5. Print shapes and a per-family column breakdown.
+    # Print shapes and a per-family column breakdown.
     feature_cols = cols  # everything except participant_id
     n_tfidf = sum(1 for c in feature_cols if c.startswith("tfidf_"))
     n_sbert = sum(1 for c in feature_cols if c.startswith("sbert_"))
@@ -81,7 +78,7 @@ def main():
     print(f"  sbert_     (S-BERT): {n_sbert}")
     print(f"  total features:     {len(feature_cols)} (+1 participant_id)")
 
-    # 6. Save the combined matrix.
+    # Save the combined matrix.
     combined.to_csv(OUTPUT_FILE, index=False)
 
     print("\nSet 3 combined features created successfully.")
